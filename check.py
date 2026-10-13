@@ -59,9 +59,13 @@ def check_tcp(target):
 
 
 def notify(lines):
-    topic = os.environ.get("NTFY_TOPIC")
+    raw = os.environ.get("NTFY_TOPIC") or ""
+    # accept "topic", "ntfy.sh/topic" or a full link, with stray spaces (easy to paste on a phone)
+    topic = "".join(raw.split()).rstrip("/").split("/")[-1].split("?")[0]
     if not topic or not lines:
         return
+    if topic != raw:     # never print the topic itself: the logs of this repo are public
+        print(f"note: NTFY_TOPIC was tidied (had {'a link, ' if '/' in raw else ''}{'spaces, ' if raw != raw.strip() or ' ' in raw else ''}{len(raw)} chars -> {len(topic)})")
     down = any(l.startswith("🔴") or l.startswith("🏠") for l in lines)
     req = urllib.request.Request(f"https://ntfy.sh/{topic}", data="\n".join(lines).encode(), method="POST", headers={
         "Title": "Mellors family services (checked from outside)",
