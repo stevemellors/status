@@ -1,0 +1,36 @@
+# Every 5 minutes (GitHub sometimes runs scheduled jobs a few minutes late): check the family services
+# from outside the house, save the result on the `data` branch, and alert the phone if something is down.
+name: Monitor
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Previous state
+        run: |
+          git fetch --depth=1 origin data 2>/dev/null && git show origin/data:status.json > /tmp/status.json || echo '{}' > /tmp/status.json
+      - name: Check
+        env:
+          STATE_FILE: /tmp/status.json
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GLUCOSE_URL: ${{ secrets.GLUCOSE_URL }}
+        run: python3 check.py
+      - name: Save (one commit, replaced each time, so history stays small)
+        run: |
+          mkdir /tmp/data && cd /tmp/data && git init -q -b data
+          cp /tmp/status.json . && git add status.json
+          git -c user.name="status bot" -c user.email="actions@github.com" commit -qm "status $(date -u +%FT%TZ)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data

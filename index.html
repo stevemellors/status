@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mellors Family Status</title>
+<meta name="description" content="Is the Mellors family website up? Checked from outside the house every few minutes.">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#16202c;--muted:#5d6b7a;--line:#e3e7ec;--up:#16a34a;--down:#dc2626;--na:#94a3b8;--bar0:#e5e7eb}
+@media (prefers-color-scheme: dark){:root{--bg:#0d1218;--card:#151c24;--ink:#e6edf3;--muted:#8b98a7;--line:#253040;--up:#22c55e;--down:#f87171;--na:#64748b;--bar0:#232c38}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:760px;margin:0 auto;padding:28px 16px 48px}
+h1{font-size:26px;margin:0 0 4px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 22px}
+.banner{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:18px;font-weight:600;font-size:18px}
+.dot{width:14px;height:14px;border-radius:50%;flex:none;background:var(--na)}
+.up .dot,.dot.up{background:var(--up)} .down .dot,.dot.down{background:var(--down)}
+.list{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{padding:14px 18px;border-top:1px solid var(--line)} .row:first-child{border-top:0}
+.top{display:flex;align-items:center;gap:10px}
+.name{font-weight:600;flex:1;min-width:0}
+.pct{font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px}
+.state{font-size:13px;color:var(--muted);margin:2px 0 8px 24px}
+.bars{display:flex;gap:2px;height:26px;margin-left:24px}
+.bars i{flex:1;border-radius:2px;background:var(--bar0)}
+.bars i.g{background:var(--up)} .bars i.y{background:#eab308} .bars i.r{background:var(--down)}
+.legend{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin:4px 0 0 24px}
+footer{color:var(--muted);font-size:13px;margin-top:20px}
+footer a{color:inherit}
+</style>
+</head>
+<body>
+<main>
+  <h1>Mellors Family Status</h1>
+  <p class="sub">Checked from outside the house about every 5 minutes, so it still works when the house is offline.</p>
+  <div class="banner" id="banner"><span class="dot"></span><span>Loading…</span></div>
+  <div class="list" id="list"></div>
+  <footer>Bars show the last 30 days. <span id="checked"></span></footer>
+</main>
+<script>
+const DATA = "https://raw.githubusercontent.com/stevemellors/status/data/status.json";
+const ago = s => { const m = Math.round((Date.now() / 1000 - s) / 60); return m < 1 ? "just now" : m < 90 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+function days(n) { const out = []; for (let i = n - 1; i >= 0; i--) out.push(new Date(Date.now() - i * 864e5).toISOString().slice(0, 10)); return out; }
+async function load() {
+  let st;
+  try { st = await (await fetch(DATA + "?t=" + Math.floor(Date.now() / 60000), {cache: "no-store"})).json(); }
+  catch { document.querySelector("#banner span:last-child").textContent = "Status isn't available yet."; return; }
+  const ids = (st.order || Object.keys(st.services)).filter(id => st.services[id] && st.services[id].up !== null);
+  const down = ids.filter(id => st.services[id].up === false);
+  const stale = Date.now() / 1000 - st.checked > 30 * 60;
+  const b = document.getElementById("banner");
+  b.className = "banner " + (down.length ? "down" : "up");
+  b.lastElementChild.textContent = down.length === ids.length ? "The house can't be reached right now (internet or power)"
+    : down.length ? `${down.length} service${down.length > 1 ? "s are" : " is"} down` : "Everything is up";
+  const D = days(30);
+  document.getElementById("list").innerHTML = ids.map(id => {
+    const s = st.services[id];
+    let ok = 0, all = 0;
+    const bars = D.map(d => { const v = s.days[d]; if (!v) return "<i></i>"; ok += v[0]; all += v[1]; const p = v[0] / v[1];
+      return `<i class="${p >= .999 ? "g" : p >= .95 ? "y" : "r"}" title="${d}: ${(p * 100).toFixed(1)}% up"></i>`; }).join("");
+    const pct = all ? (ok / all * 100).toFixed(2) + "%" : "–";
+    return `<div class="row"><div class="top"><span class="dot ${s.up ? "up" : "down"}"></span><span class="name">${esc(s.name)}</span><span class="pct">${pct}</span></div>
+      <div class="state">${s.up ? "Up" : "Down"} since ${ago(s.since)}</div><div class="bars">${bars}</div>
+      <div class="legend"><span>30 days ago</span><span>Today</span></div></div>`;
+  }).join("");
+  document.getElementById("checked").textContent = `Last checked ${ago(st.checked)}.` + (stale ? " (Checks are running late.)" : "");
+}
+load(); setInterval(load, 60000);
+</script>
+</body>
+</html>
