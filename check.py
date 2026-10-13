@@ -132,6 +132,9 @@ def main():
     else:
         msgs += [f"🔴 {name} is down ({detail})" for _, name, detail in went_down]
     msgs += came_back
+    if os.environ.get("TEST_ALERT") == "true":
+        up = sum(1 for sid in checkable if svc_state[sid]["up"])
+        msgs.append(f"🧪 Test alert: phone alerts from the outside watchdog work. {up} of {len(checkable)} services up.")
     notify(msgs)
 
     state["checked"] = now
