@@ -27,6 +27,7 @@ SERVICES = [
     ("irc", "IRC chat server", "tcp", ("mellorsfamily.com", 6697)),
     ("minecraft", "Forgecraft (Minecraft)", "tcp", ("mellorsfamily.com", 25565)),
 ]
+FEED_URL = "https://mellorsfamily.com/control/feed_in.php"   # the family phone app (Mellfam Command)
 STATE = os.environ.get("STATE_FILE", "data/status.json")
 DAYS_KEPT = 90
 ALERT_AFTER = 2          # failures in a row before a phone alert (one blip doesn't wake anyone)
@@ -56,6 +57,27 @@ def check_tcp(target):
     except Exception as e:
         return False, type(e).__name__
     return True, f"open, {int((time.time() - t0) * 1000)} ms"
+
+
+def feed(lines):
+    """Tell the Mellfam Command phone app. If the house itself is unreachable this can't get through —
+    the app notices that on its own ('Can't reach the family server') after ten minutes."""
+    token = (os.environ.get("FEED_TOKEN") or "").strip()
+    if not token or not lines:
+        return
+    down = any(l.startswith("🔴") or l.startswith("🏠") for l in lines)
+    body = "\n".join(lines)
+    data = json.dumps({
+        "kind": "down" if down else "up",
+        "title": lines[0][2:].strip() if len(lines) == 1 else ("Something at the house is down" if down else "Back up again"),
+        "body": body, "src": "outside_watchdog",
+    }).encode()
+    req = urllib.request.Request(FEED_URL, data=data, method="POST", headers={
+        "Content-Type": "application/json", "X-Feed-Token": token})
+    try:
+        urllib.request.urlopen(req, timeout=15).read()
+    except Exception as e:      # the logs of this repo are public: never print the token or the reply
+        print("feed failed:", type(e).__name__)
 
 
 def notify(lines):
@@ -139,6 +161,7 @@ def main():
     if os.environ.get("TEST_ALERT") == "true":
         up = sum(1 for sid in checkable if svc_state[sid]["up"])
         msgs.append(f"🧪 Test alert: phone alerts from the outside watchdog work. {up} of {len(checkable)} services up.")
+    feed(msgs)
     notify(msgs)
 
     state["checked"] = now
